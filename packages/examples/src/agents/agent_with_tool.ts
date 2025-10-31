@@ -1,0 +1,151 @@
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { FunctionTool, Gemini, LlmAgent } from "@google/adk";
+import { InMemorySessionService, Runner } from "@google/adk";
+import { Content } from "@google/genai";
+import { program } from "commander";
+import { z } from "zod";
+
+async function main() {
+  program
+    .option("--project <project>", "The Google Cloud project ID.")
+    .option("--model <model>", "The Gemini model name.", "gemini-2.5-flash");
+  program.parse();
+  const options = program.opts();
+
+  const model = new Gemini({
+    model: options.model,
+    vertexai: options.project ? true : false,
+    project: options.project,
+  });
+
+  interface ToolResult {
+    status: "success" | "error";
+    report?: string;
+    error_message?: string;
+  }
+
+  /**
+   * Retrieves the current weather report for a specified city.
+   *
+   * @param city The name of the city for which to retrieve the weather
+   * report.
+   * @returns status and result or error msg.
+   */
+  async function get_weather({ city }: { city: string }): Promise<ToolResult> {
+    if (city.toLowerCase() === "new york") {
+      return {
+        status: "success",
+        report:
+          "The weather in New York is sunny with a temperature of 25 degrees Celsius (77 degrees Fahrenheit).",
+      };
+    } else {
+      return {
+        status: "error",
+        error_message: `Weather information for '${city}' is not available.`,
+      };
+    }
+  }
+
+  /**
+   * Returns the current time in a specified city.
+   *
+   * @param city The name of the city for which to retrieve the current time.
+   * @returns status and result or error msg.
+   */
+  async function get_current_time({
+    city,
+  }: {
+    city: string;
+  }): Promise<ToolResult> {
+    if (city.toLowerCase() === "new york") {
+      const tzIdentifier = "America/New_York";
+      try {
+        const now = new Date();
+        const report = `The current time in ${city} is ${now.toLocaleString(
+          "en-US",
+          { timeZone: tzIdentifier },
+        )} ${tzIdentifier}`;
+        return { status: "success", report: report };
+      } catch (e) {
+        return {
+          status: "error",
+          error_message: `Error getting time for ${city}: ${e}`,
+        };
+      }
+    } else {
+      return {
+        status: "error",
+        error_message: `Sorry, I don't have timezone information for ${city}.`,
+      };
+    }
+  }
+
+  const getWeatherTool = new FunctionTool({
+    name: "get_weather",
+    description: "Retrieves the current weather report for a specified city.",
+    parameters: z.object({
+      city: z.string().describe("The name of the city."),
+    }),
+    execute: get_weather,
+  });
+
+  const getCurrentTimeTool = new FunctionTool({
+    name: "get_current_time",
+    description: "Returns the current time in a specified city.",
+    parameters: z.object({
+      city: z.string().describe("The name of the city."),
+    }),
+    execute: get_current_time,
+  });
+
+  const rootAgent = new LlmAgent({
+    name: "weather_time_agent",
+    model,
+    description:
+      "Agent to answer questions about the time and weather in a city.",
+    instruction:
+      "You are a helpful agent who can answer user questions about the time and weather in a city.",
+    tools: [getWeatherTool, getCurrentTimeTool],
+  });
+
+  const sessionService = new InMemorySessionService();
+  const runner = new Runner({
+    appName: "agent_with_tool",
+    agent: rootAgent,
+    sessionService,
+  });
+
+  const userId = "user";
+  const sessionId = "session";
+
+  await sessionService.createSession({
+    appName: "agent_with_tool",
+    userId,
+    sessionId,
+  });
+
+  const question = "What's the weather in New York?";
+  console.log(`User: ${question}`);
+
+  const message: Content = {
+    role: "user",
+    parts: [{ text: question }],
+  };
+
+  let lastResponse = "";
+  for await (const event of runner.runAsync({
+    userId,
+    sessionId,
+    newMessage: message,
+  })) {
+    // TODO: The response format is not yet finalized.
+    lastResponse = JSON.stringify(event.content, null, 2);
+  }
+  console.log(`Agent: ${lastResponse}`);
+}
+
+main();
