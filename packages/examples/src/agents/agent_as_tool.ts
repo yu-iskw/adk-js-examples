@@ -1,4 +1,9 @@
-import { GOOGLE_SEARCH, Gemini, LlmAgent } from "@google/adk";
+/**
+ * @license
+ * Copyright 2025 Google LLC
+ * SPDX-License-Identifier: Apache-2.0
+ */
+import { AgentTool, Gemini, LlmAgent } from "@google/adk";
 import { InMemorySessionService, Runner } from "@google/adk";
 import { Content } from "@google/genai";
 import { program } from "commander";
@@ -14,22 +19,27 @@ async function main() {
     model: options.model,
     vertexai: options.project ? true : false,
     project: options.project,
-    // apiKey: process.env.GOOGLE_GENAI_API_KEY,
+  });
+
+  const summaryAgent = new LlmAgent({
+    model,
+    name: "summary_agent",
+    instruction:
+      "You are an expert summarizer. Please read the following text and provide a concise summary.",
+    description: "Agent to summarize text",
   });
 
   const rootAgent = new LlmAgent({
-    model: model,
     name: "root_agent",
-    description:
-      "an agent whose job it is to perform Google search queries and answer questions about the results.",
+    model,
     instruction:
-      "You are an agent whose job is to perform Google search queries and answer questions about the results.",
-    tools: [GOOGLE_SEARCH],
+      "You are a helpful assistant. When the user provides a text, use the 'summarize' tool to generate a summary. Always forward the user's message exactly as received to the 'summarize' tool, without modifying or summarizing it yourself. Present the response from the tool to the user.",
+    tools: [new AgentTool({ agent: summaryAgent, skipSummarization: true })],
   });
 
   const sessionService = new InMemorySessionService();
   const runner = new Runner({
-    appName: "google_search_agent",
+    appName: "agent_as_tool",
     agent: rootAgent,
     sessionService,
   });
@@ -38,12 +48,13 @@ async function main() {
   const sessionId = "session";
 
   await sessionService.createSession({
-    appName: "google_search_agent",
+    appName: "agent_as_tool",
     userId,
     sessionId,
   });
 
-  const question = "What is the capital of France?";
+  const question =
+    "Compose a short story about a brave knight who must rescue a princess from a dragon. The story should be approximately 200 words and suitable for all ages.";
   console.log(`User: ${question}`);
 
   const message: Content = {
