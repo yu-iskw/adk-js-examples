@@ -2,7 +2,6 @@ import { GOOGLE_SEARCH, LlmAgent, Gemini } from "@google/adk";
 import { InMemorySessionService, Runner } from "@google/adk";
 import { Content } from "@google/genai";
 
-
 async function main() {
   const model = new Gemini({
     vertexai: process.env.GOOGLE_CLOUD_PROJECT ? true : false,
