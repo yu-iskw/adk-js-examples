@@ -8,7 +8,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "dependencies": {
-    "@google/adk": "^0.2.1",
+    "@google/adk": "^0.3.0",
     "@google/genai": "^1.30.0",
     "@modelcontextprotocol/sdk": "^1.25.2",
     "commander": "^14.0.2",
